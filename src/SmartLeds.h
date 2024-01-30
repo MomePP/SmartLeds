@@ -121,8 +121,11 @@ public:
 
     esp_err_t show() {
         esp_err_t err = startTransmission();
+        if (err != ESP_OK) {
+            return err;
+        }
         swapBuffers();
-        return err;
+        return ESP_OK;
     }
 
     bool wait(TickType_t timeout = portMAX_DELAY) {
@@ -172,9 +175,8 @@ private:
     }
 
     esp_err_t startTransmission() {
-        // Invalid use of the library, you must wait() fir previous frame to get processed first
         if (xSemaphoreTake(_finishedFlag, 0) != pdTRUE)
-            abort();
+            return ESP_FAIL;
 
         auto err = _driver.transmit(_firstBuffer.get());
         if (err != ESP_OK) {
