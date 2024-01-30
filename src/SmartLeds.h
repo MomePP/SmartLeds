@@ -119,8 +119,8 @@ public:
 
     const Rgb& operator[](int idx) const { return _firstBuffer[idx]; }
 
-    esp_err_t show() {
-        esp_err_t err = startTransmission();
+    esp_err_t show(TickType_t timeout = 0) {
+        esp_err_t err = startTransmission(timeout);
         if (err != ESP_OK) {
             return err;
         }
@@ -174,8 +174,8 @@ private:
             _firstBuffer.swap(_secondBuffer);
     }
 
-    esp_err_t startTransmission() {
-        if (xSemaphoreTake(_finishedFlag, 0) != pdTRUE)
+    esp_err_t startTransmission(TickType_t timeout) {
+        if (xSemaphoreTake(_finishedFlag, timeout) != pdTRUE)
             return ESP_FAIL;
 
         auto err = _driver.transmit(_firstBuffer.get());
