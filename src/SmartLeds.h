@@ -43,7 +43,7 @@
 
 #include "RmtDriver.h"
 
-using LedType = detail::TimingParams;
+using LedType = led_timing::TimingParams;
 
 // Times are in nanoseconds,
 // The RMT driver runs at 20MHz, so minimal representable time is 50 nanoseconds
@@ -64,7 +64,7 @@ enum IsrCore { CoreFirst = 0, CoreSecond = 1, CoreCurrent = 2 };
 
 class SmartLed {
 public:
-    friend class detail::RmtDriver;
+    friend class led_timing::RmtDriver;
 
     // The RMT interrupt must not run on the same core as WiFi interrupts, otherwise SmartLeds
     // can't fill the RMT buffer fast enough, resulting in rendering artifacts.
@@ -82,7 +82,7 @@ public:
         , _count(count)
         , _firstBuffer(new Rgb[count])
         , _secondBuffer(doubleBuffer ? new Rgb[count] : nullptr) {
-        assert(channel >= 0 && channel < detail::CHANNEL_COUNT);
+        assert(channel >= 0 && channel < led_timing::CHANNEL_COUNT);
         assert(ledForChannel(channel) == nullptr);
 
         xSemaphoreGive(_finishedFlag);
@@ -160,7 +160,7 @@ private:
     static SmartLed*& IRAM_ATTR ledForChannel(int channel);
 
     static bool anyAlive() {
-        for (int i = 0; i != detail::CHANNEL_COUNT; i++)
+        for (int i = 0; i != led_timing::CHANNEL_COUNT; i++)
             if (ledForChannel(i) != nullptr)
                 return true;
         return false;
@@ -185,7 +185,7 @@ private:
     }
 
     SemaphoreHandle_t _finishedFlag;
-    detail::RmtDriver _driver;
+    led_timing::RmtDriver _driver;
     int _channel;
     int _count;
     std::unique_ptr<Rgb[]> _firstBuffer;

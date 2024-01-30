@@ -13,7 +13,7 @@
 #define SMARTLEDS_NEW_RMT_DRIVER 0
 #endif
 
-namespace detail {
+namespace led_timing {
 
 struct TimingParams {
     uint32_t T0H;
@@ -25,7 +25,7 @@ struct TimingParams {
 
 using LedType = TimingParams;
 
-} // namespace detail
+} // namespace led_timing
 
 #if SMARTLEDS_NEW_RMT_DRIVER
 #include "RmtDriver5.h"

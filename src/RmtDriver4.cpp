@@ -3,7 +3,7 @@
 #if !SMARTLEDS_NEW_RMT_DRIVER
 #include "SmartLeds.h"
 
-namespace detail {
+namespace led_timing {
 
 // 8 still seems to work, but timings become marginal
 static const int DIVIDER = 4;
@@ -91,7 +91,7 @@ void IRAM_ATTR RmtDriver::translateSample(const void* src, rmt_item32_t* dest, s
 
             // TRST delay after last pixel in strip
             if (consumed_src_bytes == src_size) {
-                (dest - 1)->duration1 = self->_timing.TRS / (detail::RMT_DURATION_NS * detail::DIVIDER);
+                (dest - 1)->duration1 = self->_timing.TRS / (led_timing::RMT_DURATION_NS * led_timing::DIVIDER);
             }
         }
     }

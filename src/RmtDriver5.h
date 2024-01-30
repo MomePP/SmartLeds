@@ -15,7 +15,7 @@
     "without it, the IDF driver is not able to supply data fast enough."
 #endif
 
-namespace detail {
+namespace led_timing {
 
 constexpr const int CHANNEL_COUNT = SOC_RMT_GROUPS * SOC_RMT_CHANNELS_PER_GROUP;
 

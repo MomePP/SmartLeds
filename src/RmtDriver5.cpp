@@ -5,7 +5,7 @@
 
 #include "SmartLeds.h"
 
-namespace detail {
+namespace led_timing {
 
 static constexpr const uint32_t RMT_RESOLUTION_HZ = 20 * 1000 * 1000; // 20 MHz
 static constexpr const uint32_t RMT_NS_PER_TICK = 1000000000LLU / RMT_RESOLUTION_HZ;

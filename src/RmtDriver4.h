@@ -8,7 +8,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
-namespace detail {
+namespace led_timing {
 
 constexpr const int CHANNEL_COUNT = RMT_CHANNEL_MAX;
 
