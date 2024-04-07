@@ -9,16 +9,30 @@ union Rgb {
         uint8_t g, r, b, a;
     };
     uint32_t value;
+    uint8_t raw[4]; /// Access the green, red, blue, alpha data as an array.
+
+    inline uint8_t& operator[](uint8_t x) __attribute__((always_inline)) { return raw[x]; }
+    inline const uint8_t& operator[](uint8_t x) const __attribute__((always_inline)) { return raw[x]; }
 
     Rgb(uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uint8_t a = 255)
         : g(g)
         , r(r)
         , b(b)
         , a(a) {}
+    Rgb(uint32_t colorcode)
+        : r((colorcode >> 16) & 0xFF)
+        , g((colorcode >> 8) & 0xFF)
+        , b((colorcode >> 0) & 0xFF) {}
     Rgb(const Hsv& c);
     Rgb(const Rgb&) = default;
     Rgb& operator=(const Rgb& rgb) {
         swap(rgb);
+        return *this;
+    }
+    Rgb& operator=(const uint32_t colorcode) {
+        r = (colorcode >> 16) & 0xFF;
+        g = (colorcode >> 8) & 0xFF;
+        b = (colorcode >> 0) & 0xFF;
         return *this;
     }
     Rgb& operator=(const Hsv& hsv);
@@ -53,10 +67,16 @@ union Rgb {
         b = stretch(b, maxB);
     }
 
+    void stretchChannels(const Rgb& scaleValue) {
+        r = stretch(r, scaleValue.r);
+        g = stretch(g, scaleValue.g);
+        b = stretch(b, scaleValue.b);
+    }
+
     void stretchChannelsEvenly(uint8_t max) { stretchChannels(max, max, max); }
 
 private:
-    uint8_t stretch(int value, uint8_t max) { return (value * max) >> 8; }
+    uint8_t stretch(int value, uint8_t max) { return (((uint16_t)value) * (1 + (uint16_t)(max))) >> 8; }
 
     uint8_t channelGamma(int channel) {
         /* The optimal gamma correction is x^2.8. However, this is expensive to
