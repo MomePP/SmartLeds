@@ -62,6 +62,33 @@ enum BufferType { SingleBuffer = 0, DoubleBuffer };
 
 enum IsrCore { CoreFirst = 0, CoreSecond = 1, CoreCurrent = 2 };
 
+struct RmtDriverDeleter {
+    void operator()(led_timing::RmtDriver* ptr) const {
+        if (ptr) {
+            std::destroy_at(ptr);
+            heap_caps_free(ptr);
+        }
+    }
+};
+
+struct RgbDeleter {
+    int count = 0;
+
+    void operator()(Rgb* ptr) const {
+        if (ptr) {
+            std::destroy(ptr, ptr + count);
+            heap_caps_free(ptr);
+        }
+    }
+};
+
+#if __cpp_exceptions
+    #define SMARTLEDS_ALLOC_FAIL() throw std::bad_alloc();
+#else
+    #define SMARTLEDS_ALLOC_FAIL() abort();
+#endif
+
+
 class SmartLed {
 public:
     friend class led_timing::RmtDriver;
@@ -77,17 +104,36 @@ public:
     SmartLed(const LedType& type, int count, int pin, int channel = 0, BufferType doubleBuffer = DoubleBuffer,
         IsrCore isrCore = CoreCurrent)
         : _finishedFlag(xSemaphoreCreateBinary())
-        , _driver(type, count, pin, channel, _finishedFlag)
         , _channel(channel)
-        , _count(count)
-        , _firstBuffer(new Rgb[count])
-        , _secondBuffer(doubleBuffer ? new Rgb[count] : nullptr) {
+        , _count(count) {
         assert(channel >= 0 && channel < led_timing::CHANNEL_COUNT);
         assert(ledForChannel(channel) == nullptr);
 
         xSemaphoreGive(_finishedFlag);
 
-        _driver.init();
+        auto mem = heap_caps_malloc(sizeof(led_timing::RmtDriver), MALLOC_CAP_INTERNAL);
+        if (!mem) {
+            SMARTLEDS_ALLOC_FAIL();
+        }
+        _driver.reset(new (reinterpret_cast<led_timing::RmtDriver*>(mem)) led_timing::RmtDriver(type, count, pin, channel, _finishedFlag));
+
+        constexpr auto allocateRgb = [](size_t count, auto memoryCaps) {
+            auto mem = reinterpret_cast<Rgb*>(heap_caps_malloc(sizeof(Rgb) * count, memoryCaps));
+            if (!mem) {
+                SMARTLEDS_ALLOC_FAIL();
+            }
+            return new (mem) Rgb[count];
+        };
+
+        _firstBuffer.reset(allocateRgb(count, MALLOC_CAP_INTERNAL));
+        _firstBuffer.get_deleter().count = count;
+
+        if (doubleBuffer) {
+            _secondBuffer.reset(allocateRgb(count, MALLOC_CAP_INTERNAL));
+            _secondBuffer.get_deleter().count = count;
+        }
+
+        _driver->init();
 
 #if !defined(SOC_CPU_CORES_NUM) || SOC_CPU_CORES_NUM > 1
         if (!anyAlive() && isrCore != CoreCurrent) {
@@ -152,12 +198,12 @@ private:
 
     static void registerInterrupt(void* selfVoid) {
         auto* self = (SmartLed*)selfVoid;
-        ESP_ERROR_CHECK(self->_driver.registerIsr(!anyAlive()));
+        ESP_ERROR_CHECK(self->_driver->registerIsr(!anyAlive()));
     }
 
     static void unregisterInterrupt(void* selfVoid) {
         auto* self = (SmartLed*)selfVoid;
-        ESP_ERROR_CHECK(self->_driver.unregisterIsr());
+        ESP_ERROR_CHECK(self->_driver->unregisterIsr());
     }
 
     static SmartLed*& IRAM_ATTR ledForChannel(int channel);
@@ -178,7 +224,7 @@ private:
         if (xSemaphoreTake(_finishedFlag, timeout) != pdTRUE)
             return ESP_FAIL;
 
-        auto err = _driver.transmit(_firstBuffer.get());
+        auto err = _driver->transmit(_firstBuffer.get());
         if (err != ESP_OK) {
             return err;
         }
@@ -187,19 +233,22 @@ private:
     }
 
     SemaphoreHandle_t _finishedFlag;
-    led_timing::RmtDriver _driver;
+    std::unique_ptr<led_timing::RmtDriver, RmtDriverDeleter> _driver;
     int _channel;
     int _count;
-    std::unique_ptr<Rgb[]> _firstBuffer;
-    std::unique_ptr<Rgb[]> _secondBuffer;
+    std::unique_ptr<Rgb[], RgbDeleter> _firstBuffer;
+    std::unique_ptr<Rgb[], RgbDeleter> _secondBuffer;
 };
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
 #define _SMARTLEDS_SPI_HOST SPI2_HOST
+#define _SMARTLEDS_SPI_DMA_CHAN SPI_DMA_CH_AUTO
 #else
 #define _SMARTLEDS_SPI_HOST HSPI_HOST
+#define _SMARTLEDS_SPI_DMA_CHAN 1
 #endif
 
+// Can also handle SK9822
 class Apa102 {
 public:
     struct ApaRgb {
@@ -227,10 +276,11 @@ public:
     static const int FINAL_FRAME_SIZE = 4;
     static const int TRANS_COUNT = 2 + 8;
 
-    Apa102(int count, int clkpin, int datapin, BufferType doubleBuffer = SingleBuffer)
+    Apa102(int count, int clkpin, int datapin, BufferType doubleBuffer = SingleBuffer, int clock_speed_hz = 1000000)
         : _count(count)
         , _firstBuffer(new ApaRgb[count])
         , _secondBuffer(doubleBuffer ? new ApaRgb[count] : nullptr)
+        , _transCount(0)
         , _initFrame(0) {
         spi_bus_config_t buscfg;
         memset(&buscfg, 0, sizeof(buscfg));
@@ -243,19 +293,19 @@ public:
 
         spi_device_interface_config_t devcfg;
         memset(&devcfg, 0, sizeof(devcfg));
-        devcfg.clock_speed_hz = 1000000;
+        devcfg.clock_speed_hz = clock_speed_hz;
         devcfg.mode = 0;
         devcfg.spics_io_num = -1;
         devcfg.queue_size = TRANS_COUNT;
         devcfg.pre_cb = nullptr;
 
-        auto ret = spi_bus_initialize(_SMARTLEDS_SPI_HOST, &buscfg, 1);
+        auto ret = spi_bus_initialize(_SMARTLEDS_SPI_HOST, &buscfg, _SMARTLEDS_SPI_DMA_CHAN);
         assert(ret == ESP_OK);
 
         ret = spi_bus_add_device(_SMARTLEDS_SPI_HOST, &devcfg, &_spi);
         assert(ret == ESP_OK);
 
-        std::fill_n(_finalFrame, FINAL_FRAME_SIZE, 0xFFFFFFFF);
+        std::fill_n(_finalFrame, FINAL_FRAME_SIZE, 0);
     }
 
     ~Apa102() {
@@ -303,8 +353,10 @@ private:
         spi_device_queue_trans(_spi, _transactions + 1, portMAX_DELAY);
         _transCount = 2;
         // End frame
-        for (int i = 0; i != 1 + _count / 32 / FINAL_FRAME_SIZE; i++) {
-            _transactions[2 + i].length = 32 * FINAL_FRAME_SIZE;
+        // https://cpldcpu.com/2016/12/13/sk9822-a-clone-of-the-apa102/ - "Unified protocol"
+        const int end_bits = 32 + (_count/2 + 1);
+        for (int i = 0; i < end_bits; i += 32 * FINAL_FRAME_SIZE) {
+            _transactions[2 + i].length = std::min(32 * FINAL_FRAME_SIZE, end_bits - i);
             _transactions[2 + i].tx_buffer = _finalFrame;
             spi_device_queue_trans(_spi, _transactions + 2 + i, portMAX_DELAY);
             _transCount++;
@@ -377,7 +429,7 @@ public:
         devcfg.queue_size = TRANS_COUNT_MAX;
         devcfg.pre_cb = nullptr;
 
-        auto ret = spi_bus_initialize(_SMARTLEDS_SPI_HOST, &buscfg, 1);
+        auto ret = spi_bus_initialize(_SMARTLEDS_SPI_HOST, &buscfg, _SMARTLEDS_SPI_DMA_CHAN);
         assert(ret == ESP_OK);
 
         ret = spi_bus_add_device(_SMARTLEDS_SPI_HOST, &devcfg, &_spi);
