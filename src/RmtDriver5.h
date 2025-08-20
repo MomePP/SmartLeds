@@ -29,7 +29,8 @@ struct RmtEncoderWrapper {
     RmtDriver* driver;
     rmt_symbol_word_t reset_code;
 
-    alignas(4) uint8_t buffer[SOC_RMT_MEM_WORDS_PER_CHANNEL / 8];
+    // ESP-IDF v5.5+ requires DMA buffers to be 32-byte aligned and in DMA-capable memory
+    alignas(32) uint8_t buffer[SOC_RMT_MEM_WORDS_PER_CHANNEL / 8];
     rmt_encode_state_t last_state;
     size_t frame_idx;
     uint8_t component_idx;

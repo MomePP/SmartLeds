@@ -2,6 +2,7 @@
 
 #if SMARTLEDS_NEW_RMT_DRIVER
 #include <cstddef>
+#include <cstring>
 
 #include "SmartLeds.h"
 
@@ -26,25 +27,31 @@ static size_t IRAM_ATTR encEncode(rmt_encoder_t* encoder, rmt_channel_handle_t t
     }
 
     if (self->last_state & RMT_ENCODING_COMPLETE) {
-        self->buffer_len = sizeof(self->buffer);
-        for (size_t i = 0; i < sizeof(self->buffer); ++i) {
-            // Bounds check to prevent buffer overrun with ESP-IDF v5.5+
-            // This fixes corruption when updating one pixel affects others
-            if (self->frame_idx >= data_size) {
-                self->buffer_len = i;
-                break;
-            }
-            // Calculate pixel pointer safely for each access to prevent corruption
-            Rgb* pixel = ((Rgb*)primary_data) + self->frame_idx;
-            self->buffer[i] = pixel->getGrb(self->component_idx);
-            if (++self->component_idx == 3) {
+        // Clear buffer to prevent stale data corruption in ESP-IDF v5.5+
+        memset(self->buffer, 0, sizeof(self->buffer));
+        
+        size_t buffer_pos = 0;
+        const size_t max_buffer_size = sizeof(self->buffer);
+        
+        // Fill buffer with pixel data, respecting all bounds
+        while (buffer_pos < max_buffer_size && self->frame_idx < data_size) {
+            // Safe pixel access with explicit bounds checking
+            const Rgb* pixel = ((const Rgb*)primary_data) + self->frame_idx;
+            
+            // Get the color component for current position
+            uint8_t color_byte = pixel->getGrb(self->component_idx);
+            self->buffer[buffer_pos] = color_byte;
+            buffer_pos++;
+            
+            // Move to next component
+            self->component_idx++;
+            if (self->component_idx >= 3) {
                 self->component_idx = 0;
-                if (++self->frame_idx == data_size) {
-                    self->buffer_len = i + 1;
-                    break;
-                }
+                self->frame_idx++;
             }
         }
+        
+        self->buffer_len = buffer_pos;
     }
 
     self->last_state = (rmt_encode_state_t)0;
