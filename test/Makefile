@@ -10,7 +10,7 @@ clean:
 catch.hpp:
 	wget https://github.com/catchorg/Catch2/releases/download/v2.6.0/catch.hpp
 
-tests: main.o Color.o colorConversion.o
+tests: main.o Color.o colorConversion.o bufferCorruption.o
 	g++ $(CXX_FLAGS) $^ -o $@
 
 %.o: %.cpp catch.hpp
