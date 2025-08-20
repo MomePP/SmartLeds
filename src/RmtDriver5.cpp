@@ -29,6 +29,12 @@ static size_t IRAM_ATTR encEncode(rmt_encoder_t* encoder, rmt_channel_handle_t t
         Rgb* pixel = ((Rgb*)primary_data) + self->frame_idx;
         self->buffer_len = sizeof(self->buffer);
         for (size_t i = 0; i < sizeof(self->buffer); ++i) {
+            // Bounds check to prevent buffer overrun with ESP-IDF v5.5+
+            // This fixes corruption when updating one pixel affects others
+            if (self->frame_idx >= data_size) {
+                self->buffer_len = i;
+                break;
+            }
             self->buffer[i] = pixel->getGrb(self->component_idx);
             if (++self->component_idx == 3) {
                 self->component_idx = 0;
