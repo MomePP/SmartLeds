@@ -7,6 +7,10 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <type_traits>
+#include <esp_heap_caps.h>
+#include <esp_cache.h>
+#include <hal/cache_hal.h>
+#include <hal/cache_ll.h>
 
 #include "Color.h"
 
@@ -29,12 +33,14 @@ struct RmtEncoderWrapper {
     RmtDriver* driver;
     rmt_symbol_word_t reset_code;
 
-    // ESP-IDF v5.5+ requires DMA buffers to be 32-byte aligned and in DMA-capable memory
-    alignas(32) uint8_t buffer[SOC_RMT_MEM_WORDS_PER_CHANNEL / 8];
+    // ESP-IDF v5.5+ requires DMA buffers to be dynamically allocated in DMA-capable memory
+    uint8_t* buffer;
+    uint8_t* buffer_nc;  // Non-cached address for DMA operations
     rmt_encode_state_t last_state;
     size_t frame_idx;
     uint8_t component_idx;
     uint8_t buffer_len;
+    uint8_t buffer_size;
 };
 
 static_assert(std::is_standard_layout<RmtEncoderWrapper>::value == true);

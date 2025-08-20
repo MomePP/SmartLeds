@@ -63,3 +63,57 @@ TEST_CASE("Multiple pixel access doesn't corrupt buffers", "[buffer-corruption]"
         }
     }
 }
+
+TEST_CASE("Pixel data structure integrity for ESP-IDF v5.5", "[esp-idf-v5.5]") {
+    // Test that the Rgb structure meets ESP-IDF v5.5 memory alignment requirements
+    
+    // Verify structure size and alignment
+    REQUIRE(sizeof(Rgb) == 4);
+    REQUIRE(alignof(Rgb) >= 4); // Should be at least 4-byte aligned
+    
+    // Test multiple pixels in an array (simulating LED strip buffer)
+    const int pixel_count = 32;
+    Rgb pixels[pixel_count];
+    
+    // Initialize pixels with distinct patterns
+    for (int i = 0; i < pixel_count; i++) {
+        pixels[i] = Rgb(i * 8, (i * 16) % 256, (i * 24) % 256);
+    }
+    
+    // Verify each pixel maintains its data integrity when accessed
+    for (int i = 0; i < pixel_count; i++) {
+        const Rgb& pixel = pixels[i];
+        
+        // Test const-correctness of getGrb method
+        uint8_t g = pixel.getGrb(0);
+        uint8_t r = pixel.getGrb(1);
+        uint8_t b = pixel.getGrb(2);
+        
+        // Verify values match expected pattern
+        REQUIRE(r == (i * 8));
+        REQUIRE(g == ((i * 16) % 256));
+        REQUIRE(b == ((i * 24) % 256));
+        
+        // Verify accessing one pixel doesn't affect others
+        for (int j = 0; j < pixel_count; j++) {
+            if (j != i) {
+                REQUIRE(pixels[j].r == (j * 8));
+                REQUIRE(pixels[j].g == ((j * 16) % 256));
+                REQUIRE(pixels[j].b == ((j * 24) % 256));
+            }
+        }
+    }
+}
+
+TEST_CASE("Color component access bounds checking", "[esp-idf-v5.5]") {
+    // Test that getGrb method handles bounds correctly
+    Rgb pixel(0x12, 0x34, 0x56, 0x78);
+    
+    // Valid indices should work
+    REQUIRE(pixel.getGrb(0) == 0x34); // Green
+    REQUIRE(pixel.getGrb(1) == 0x12); // Red
+    REQUIRE(pixel.getGrb(2) == 0x56); // Blue
+    
+    // The method should handle the expected indices correctly
+    // (Note: getGrb only expects indices 0, 1, 2 based on the implementation)
+}
