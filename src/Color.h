@@ -49,7 +49,7 @@ union Rgb {
         b = channelGamma(b);
     }
 
-    inline uint8_t IRAM_ATTR getGrb(int idx) {
+    inline uint8_t IRAM_ATTR getGrb(int idx) const {
         switch (idx) {
         case 0:
             return g;
