@@ -2,7 +2,7 @@
 
 Simple & intuitive way to drive various smart LEDs on ESP32.
 
-Requires ESP-IDF >=4.0
+Requires ESP-IDF >=4.0, compatible with ESP32 Arduino v3.3.0 (ESP-IDF v5.5)
 
 ## Supported LEDs:
 
