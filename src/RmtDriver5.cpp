@@ -26,7 +26,6 @@ static size_t IRAM_ATTR encEncode(rmt_encoder_t* encoder, rmt_channel_handle_t t
     }
 
     if (self->last_state & RMT_ENCODING_COMPLETE) {
-        Rgb* pixel = ((Rgb*)primary_data) + self->frame_idx;
         self->buffer_len = sizeof(self->buffer);
         for (size_t i = 0; i < sizeof(self->buffer); ++i) {
             // Bounds check to prevent buffer overrun with ESP-IDF v5.5+
@@ -35,6 +34,8 @@ static size_t IRAM_ATTR encEncode(rmt_encoder_t* encoder, rmt_channel_handle_t t
                 self->buffer_len = i;
                 break;
             }
+            // Calculate pixel pointer safely for each access to prevent corruption
+            Rgb* pixel = ((Rgb*)primary_data) + self->frame_idx;
             self->buffer[i] = pixel->getGrb(self->component_idx);
             if (++self->component_idx == 3) {
                 self->component_idx = 0;
@@ -42,7 +43,6 @@ static size_t IRAM_ATTR encEncode(rmt_encoder_t* encoder, rmt_channel_handle_t t
                     self->buffer_len = i + 1;
                     break;
                 }
-                ++pixel;
             }
         }
     }
